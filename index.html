@@ -99,6 +99,8 @@ body{
 .gbtn:focus-visible{outline:2px solid var(--plum);outline-offset:2px}
 .cs .cta{justify-content:center}
 .cs.ready{box-shadow:0 0 0 3px var(--pc)}
+.diff3{grid-template-columns:repeat(3,1fr)}
+.cpu-note{margin:0;font-size:13px;color:var(--plum-soft);line-height:1.45}
 .steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;text-align:left;counter-reset:st;width:100%}
 .steps li{display:flex;gap:12px;align-items:flex-start;font-size:15px;line-height:1.45;counter-increment:st}
 .steps li::before{content:counter(st);flex:none;width:28px;height:28px;border-radius:9px;background:var(--magenta);color:#fff;display:grid;place-items:center;font:700 14px var(--font-num)}
@@ -170,7 +172,8 @@ body{
 .powered b{color:var(--magenta);font-weight:800}
 .lede{margin:0;font-size:15px;line-height:1.5;max-width:36ch}
 .modes{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%}
-.mode{flex:1 1 170px;display:flex;align-items:center;gap:10px;text-align:left;border:2px solid var(--line);background:#fff;color:var(--plum);border-radius:20px;padding:10px 14px 10px 10px;cursor:pointer;font:inherit}
+#titleScreen .panel{max-width:620px}
+.mode{flex:1 1 160px;display:flex;align-items:center;gap:10px;text-align:left;border:2px solid var(--line);background:#fff;color:var(--plum);border-radius:20px;padding:10px 14px 10px 10px;cursor:pointer;font:inherit}
 .mode b{display:block;font-family:var(--font-display);font-weight:400;font-size:20px;line-height:1.1}
 .mode small{display:block;font-size:12px;color:var(--plum-soft)}
 .mode .btn-a{visibility:hidden}
@@ -299,6 +302,7 @@ body{
     <p class="powered">powered by <b>@hannorafy</b></p>
     <div class="modes">
       <button class="mode focus" id="modeVs"><span class="btn-a">A</span><span><b>Tanding</b><small>2 pemain · menang 3 dari 5</small></span></button>
+      <button class="mode" id="modeCpu"><span class="btn-a">A</span><span><b>Lawan CPU</b><small>1 pemain vs komputer</small></span></button>
       <button class="mode" id="modePr"><span class="btn-a">A</span><span><b>Latihan</b><small>1 pemain · tanpa batas waktu</small></span></button>
     </div>
     <div class="cta-row"><button class="link-btn" id="howBtn"><span class="btn-a btn-y">Y</span>Cara bermain</button><button class="link-btn" id="musicBtn">Musik: nyala (M)</button></div>
@@ -385,7 +389,7 @@ body{
     <p class="big-title" id="msTitle">P1 juara!</p>
     <p class="score" id="msScore"></p>
     <table class="stat-table">
-      <thead><tr><th></th><th>P1</th><th>P2</th></tr></thead>
+      <thead id="msHead"><tr><th></th><th>P1</th><th>P2</th></tr></thead>
       <tbody id="msStats"></tbody>
     </table>
     <div class="cta-row">
@@ -701,15 +705,39 @@ function buildRack(i){
   scene.add(g);
   return g;
 }
-const MACH_U = {add:-4.85, sub:4.85};
+// + and − sit in the block area; × and ÷ sit in the scale area; each against the left / right fence
+const MACH_KINDS = {
+  add:{sym:'+', color:'#2fae80', name:'penambah', help:'masukkan dua balok untuk dijumlah'},
+  sub:{sym:'−', color:'#ef5a3c', name:'pengurang', help:'balok pertama dikurangi balok kedua'},
+  mul:{sym:'×', color:'#8f6ae6', name:'pengali', help:'balok pertama dikali balok kedua'},
+  div:{sym:'÷', color:'#1fa3b5', name:'pembagi', help:'balok pertama dibagi balok kedua, hasilnya harus bulat'}
+};
+const MACH_SPOTS = [
+  {kind:'add', u:-4.85, z:PADS_Z, big:true}, {kind:'sub', u:4.85, z:PADS_Z, big:true},
+  {kind:'mul', u:-4.9, z:-6.9, big:false}, {kind:'div', u:4.9, z:-6.9, big:false}
+];
+const machSym = m => MACH_KINDS[m.kind].sym;
+function machCalc(kind, x, y){ return kind === 'add' ? x + y : kind === 'sub' ? x - y : kind === 'mul' ? x*y : x/y; }
+function machValid(kind, x, y){
+  if (kind === 'sub') return x - y !== 0;
+  if (kind === 'div') return y !== 0 && x % y === 0;
+  return true;
+}
 function machineTex(kind){
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 192;
   const g = cv.getContext('2d');
-  rrect(g, 6, 6, 244, 180, 34); g.fillStyle = kind === 'add' ? '#2fae80' : '#ef5a3c'; g.fill();
+  rrect(g, 6, 6, 244, 180, 34); g.fillStyle = MACH_KINDS[kind].color; g.fill();
   g.lineWidth = 10; g.strokeStyle = '#ffffff'; g.stroke();
-  g.fillStyle = '#ffffff'; g.lineCap = 'round';
-  g.fillRect(68, 84, 120, 26);
-  if (kind === 'add') g.fillRect(115, 37, 26, 120);
+  g.fillStyle = '#ffffff';
+  if (kind === 'mul'){
+    g.save(); g.translate(128, 97);
+    for (const r of [Math.PI/4, -Math.PI/4]){ g.save(); g.rotate(r); g.fillRect(-60, -13, 120, 26); g.restore(); }
+    g.restore();
+  } else {
+    g.fillRect(68, 84, 120, 26);
+    if (kind === 'add') g.fillRect(115, 37, 26, 120);
+    if (kind === 'div'){ for (const y of [52, 142]){ g.beginPath(); g.arc(128, y, 17, 0, Math.PI*2); g.fill(); } }
+  }
   const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
   return t;
 }
@@ -732,7 +760,7 @@ function buildMonitor(p){
 function updateMonitor(p){
   const m = p.monitor; if (!m) return;
   m.g.visible = p.active || S.mode === 'title';
-  const sum = plateSum(p), key = sum + '|' + p.color;
+  const sum = plateSum(p), key = sum + '|' + p.color + '|' + pName(p.i);
   if (key === m.key) return;
   m.key = key;
   const g = m.cv.getContext('2d'), W = 512, H = 282;
@@ -741,7 +769,7 @@ function updateMonitor(p){
   g.fillStyle = p.color; g.fillRect(0, 0, W, 18);
   g.globalAlpha = .06; g.fillStyle = '#ffffff'; for (let y = 22; y < H; y += 6) g.fillRect(0, y, W, 2); g.globalAlpha = 1;
   g.textBaseline = 'middle';
-  g.font = '64px ' + FONT; g.fillStyle = p.color; g.textAlign = 'left'; g.fillText('P' + (p.i + 1), 26, 68);
+  g.font = '64px ' + FONT; g.fillStyle = p.color; g.textAlign = 'left'; g.fillText(pName(p.i), 26, 68);
   g.font = '800 28px Figtree, system-ui, sans-serif'; g.fillStyle = 'rgba(255,255,255,.7)'; g.textAlign = 'right';
   g.fillText('ISI PIRING', W - 26, 66);
   g.font = (Math.abs(sum) >= 100 ? '150px ' : '176px ') + FONT; g.fillStyle = '#f7b500'; g.textAlign = 'center';
@@ -749,27 +777,30 @@ function updateMonitor(p){
   m.tex.needsUpdate = true;
 }
 function buildMachines(p){
-  return ['add','sub'].map(kind => {
-    const col = kind === 'add' ? '#2fae80' : '#ef5a3c';
-    const g = new THREE.Group(); g.position.set(p.laneX + MACH_U[kind], 0, PADS_Z);
-    const body = mesh(new THREE.BoxGeometry(1.05,.64,1.7), col); body.position.y = .48; g.add(body);
-    const top = mesh(new THREE.BoxGeometry(1.12,.06,1.78), shade(col, .2)); top.position.y = .82; g.add(top);
-    for (const z of [-.42, .42]){ const sl = mesh(new THREE.CylinderGeometry(.3,.3,.03,20), C.white, false, true); sl.position.set(0,.86,z); g.add(sl); }
+  return MACH_SPOTS.map(sp => {
+    const kind = sp.kind, col = MACH_KINDS[kind].color;
+    const D = sp.big ? 1.7 : 1.3, W = sp.big ? 1.05 : 1.0, sz = sp.big ? .42 : .33;
+    const g = new THREE.Group(); g.position.set(p.laneX + sp.u, 0, sp.z);
+    const body = mesh(new THREE.BoxGeometry(W,.64,D), col); body.position.y = .48; g.add(body);
+    const top = mesh(new THREE.BoxGeometry(W + .07,.06,D + .08), shade(col, .2)); top.position.y = .82; g.add(top);
+    for (const z of [-sz, sz]){ const sl = mesh(new THREE.CylinderGeometry(sp.big ? .3 : .26, sp.big ? .3 : .26,.03,20), C.white, false, true); sl.position.set(0,.86,z); g.add(sl); }
     const tex = machineTex(kind);
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(.9,.54), new THREE.MeshBasicMaterial({map:tex, transparent:true}));
-    face.position.set(0,.48,.86); g.add(face);
-    const post = mesh(new THREE.CylinderGeometry(.04,.04,1.0,8), C.white); post.position.set(0,1.3,-.78); g.add(post);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(.9*W/1.05,.54), new THREE.MeshBasicMaterial({map:tex, transparent:true}));
+    face.position.set(0,.48,D/2 + .01); g.add(face);
+    const post = mesh(new THREE.CylinderGeometry(.04,.04,1.0,8), C.white); post.position.set(0,1.3,-D/2 + .07); g.add(post);
     const board = new THREE.Mesh(new THREE.PlaneGeometry(.9,.68), new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide}));
-    board.position.set(0,2.0,-.78); board.rotation.x = -.35; g.add(board);
+    board.position.set(0,2.0,-D/2 + .07); board.rotation.x = -.35; g.add(board);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(.55,.04,8,32), new THREE.MeshBasicMaterial({color:new THREE.Color('#f7b500').convertSRGBToLinear()}));
     ring.rotation.x = Math.PI/2; ring.position.y = .9; ring.visible = false; g.add(ring);
     scene.add(g);
-    return {kind, g, inputs:[], out:null, busy:0, pending:0, ring, x:g.position.x, z:PADS_Z};
+    const x = g.position.x, z = sp.z, cr = sp.big ? .56 : .55, cz = sp.big ? .45 : .3;
+    return {kind, g, inputs:[], out:null, busy:0, pending:0, ring, x, z, slotZ:sz,
+      range: sp.big ? 1.75 : 1.3, cols:[{x, z:z - cz, r:cr}, {x, z:z + cz, r:cr}]};
   });
 }
 function nearMach(p){
-  let best = null, bd = 1.75;
-  for (const m of p.mach){ const d = Math.hypot(p.x - m.x, p.z - m.z); if (d < bd){ bd = d; best = m; } }
+  let best = null, bd = 9;
+  for (const m of p.mach){ const d = Math.hypot(p.x - m.x, p.z - m.z); if (d < m.range && d < bd){ bd = d; best = m; } }
   return best ? {m:best, d:bd} : null;
 }
 function resetMachines(p){
@@ -781,7 +812,7 @@ function updateMachines(p, dt){
     if (m.busy > 0){
       m.busy -= dt;
       const q = 1 - Math.max(0, m.busy)/.7;
-      m.inputs.forEach((o, k) => { o.position.z = (k ? .42 : -.42)*(1 - q); o.scale.setScalar(.7*(1 - q*.7)); o.rotation.y = q*6; });
+      m.inputs.forEach((o, k) => { o.position.z = (k ? m.slotZ : -m.slotZ)*(1 - q); o.scale.setScalar(.7*(1 - q*.7)); o.rotation.y = q*6; });
       if (m.busy <= 0){
         m.inputs.forEach(o => m.g.remove(o)); m.inputs = [];
         m.out = blockMesh(m.pending, true); m.out.position.set(0, 1.45, 0); m.g.add(m.out); pop(m.out, 1);
@@ -1024,13 +1055,13 @@ function actionFor(p){
   const slot = nearSlot(p), atPan = nearPan(p), pd = nearPad(p), mc = nearMach(p);
   const padD = pd ? Math.hypot(p.x - pd.x, p.z - pd.z) : 9;
   const kiosk = !S.versus && kioskG && Math.hypot(p.x - KIOSK.x, p.z - KIOSK.z) <= 2.4;
-  if (mc && mc.d < padD){
+  if (mc && mc.d < padD && !(atPan && mc.m.range < 1.5 && mc.d > 1.0)){
     const m = mc.m;
     if (m.busy > 0) return {kind:'machBusy', m};
     if (p.held){
       if (m.out) return {kind:'machFull', m};
       const o = topHeld(p);
-      if (m.inputs.length === 1 && m.kind === 'sub' && m.inputs[0].userData.value - o.userData.value === 0) return {kind:'machBad', m, o};
+      if (m.inputs.length === 1 && !machValid(m.kind, m.inputs[0].userData.value, o.userData.value)) return {kind:'machBad', m, o};
       return {kind:'machPut', m, o};
     }
     if (m.out) return {kind:'machTake', m};
@@ -1099,13 +1130,13 @@ function playerA(pi){
     case 'machPut': {
       const m = a.m, o = popHeld(p);
       o.scale.setScalar(.7);
-      o.position.set(0, .86 + o.userData.size*.35, m.inputs.length ? .42 : -.42);
+      o.position.set(0, .86 + o.userData.size*.35, m.inputs.length ? m.slotZ : -m.slotZ);
       o.rotation.set(0,0,0);
       m.g.add(o); m.inputs.push(o);
       sfx.place(); rumble(pi, 70, .2, .2);
       if (m.inputs.length === 2){
         const x = m.inputs[0].userData.value, y = m.inputs[1].userData.value;
-        m.pending = m.kind === 'add' ? x + y : x - y; m.busy = .7;
+        m.pending = machCalc(m.kind, x, y); m.busy = .7;
         tone(500,.12,'square',.05,900); tone(700,.12,'square',.05,1200,.15);
       }
       break;
@@ -1121,22 +1152,27 @@ function playerA(pi){
 const screens = ['titleScreen','roundScreen','matchScreen','winScreen','charScreen','howScreen','practiceScreen','kioskScreen'];
 function show(id){ screens.forEach(s => $(s).hidden = s !== id); }
 
-function startMode(versus){
+function startMode(versus, cpu){
   audio();
-  S.versus = versus;
+  S.versus = versus; S.cpu = !!cpu;
   openCharSelect();
 }
+// two people at the controls (Tanding); in Lawan CPU every keyboard set and controller drives P1
+const humans2 = () => S.versus && !S.cpu;
+const pName = i => S.cpu && i === 1 ? 'CPU' : 'P' + (i + 1);
 function startMatch(){
   audio();
   const versus = S.versus;
   S.roundIdx = 0; S.practiceN = 0;
   P.forEach(p => { clearPlayer(p); p.wins = 0; p.placed = 0; p.knocks = 0; p.fastest = null; p.active = versus || p.i === 0; p.mesh.visible = p.active; p.tt.visible = false; });
   hideChampion();
-  $('chip1').hidden = !versus; $('prompt1').hidden = !versus;
+  $('chip1').hidden = !versus; $('prompt1').hidden = !humans2();
   $('dots0').hidden = !versus;
-  $('hudBottom').classList.toggle('solo', !versus);
-  $('touch').className = 'touch ' + (versus ? 'duo' : 'solo');
-  document.body.classList.toggle('duo', versus);
+  document.querySelector('#chip1 .pname').textContent = pName(1);
+  $('hudBottom').classList.toggle('solo', !humans2());
+  $('touch').className = 'touch ' + (humans2() ? 'duo' : 'solo');
+  document.body.classList.toggle('duo', humans2());
+  aiReset();
   show(null);
   $('hud').hidden = false; $('hudBottom').hidden = false; $('touch').hidden = false;
   startRound();
@@ -1162,6 +1198,7 @@ function startRound(){
   });
   S.time = 0; S.lastWinner = -1;
   $('countSub').textContent = S.courseName;
+  aiReset();
   resetPowerField();
   show(null);
   if (S.versus){
@@ -1200,10 +1237,10 @@ function fillRoundScreen(){
   const wi = S.lastWinner;
   $('rsEyebrow').textContent = (S.lastReason === 'time' ? 'Waktu habis · ' : '') + 'Ronde ' + (S.roundIdx + 1) + ' dari ' + MAX_ROUNDS;
   const t = $('rsTitle');
-  t.textContent = wi >= 0 ? 'P' + (wi+1) + ' menang ronde!' : 'Seri, ronde diulang';
+  t.textContent = wi >= 0 ? pName(wi) + ' menang ronde!' : 'Seri, ronde diulang';
   t.style.color = wi >= 0 ? P[wi].color : C.plum;
   $('rsReveal').innerHTML = P.map(p =>
-    `<div style="--pc:${p.color}"><span class="lbl">P${p.i+1} · M</span><span class="num">${p.M}</span><span class="sub">piring ${plateSum(p)}</span></div>`).join('');
+    `<div style="--pc:${p.color}"><span class="lbl">${pName(p.i)} · M</span><span class="num">${p.M}</span><span class="sub">piring ${plateSum(p)}</span></div>`).join('');
   $('rsScore').innerHTML = `<span style="color:${P[0].color}">${P[0].wins}</span><span class="sep">–</span><span style="color:${P[1].color}">${P[1].wins}</span>`;
   const done = P.some(p => p.wins >= WIN_TARGET);
   $('rsNext').lastChild.textContent = done ? 'Lihat juara' : 'Ronde berikutnya';
@@ -1218,7 +1255,8 @@ function advanceRound(){
 function endMatch(){
   S.mode = 'matchEnd';
   const wi = P[0].wins > P[1].wins ? 0 : 1;
-  const t = $('msTitle'); t.textContent = 'P' + (wi+1) + ' juara!'; t.style.color = P[wi].color;
+  const t = $('msTitle'); t.textContent = pName(wi) + ' juara!'; t.style.color = P[wi].color;
+  $('msHead').innerHTML = `<tr><th></th><th>P1</th><th>${pName(1)}</th></tr>`;
   $('msScore').innerHTML = `<span style="color:${P[0].color}">${P[0].wins}</span><span class="sep">–</span><span style="color:${P[1].color}">${P[1].wins}</span>`;
   const row = (label, f) => `<tr><td>${label}</td><td>${f(P[0])}</td><td>${f(P[1])}</td></tr>`;
   $('msStats').innerHTML =
@@ -1260,12 +1298,16 @@ function toMenu(){
   updatePadStatus();
   requestAnimationFrame(fitCamera);
 }
+const MODE_IDS = ['modeVs', 'modeCpu', 'modePr'];
+function setFocus(k){
+  S.menuFocus = k;
+  MODE_IDS.forEach((id, j) => $(id).classList.toggle('focus', j === k));
+}
 function moveFocus(dir){
-  S.menuFocus = 1 - S.menuFocus;
-  $('modeVs').classList.toggle('focus', S.menuFocus === 0);
-  $('modePr').classList.toggle('focus', S.menuFocus === 1);
+  setFocus((S.menuFocus + (dir < 0 ? -1 : 1) + 3) % 3);
   tone(620,.05,'triangle',.08);
 }
+const startFocused = () => S.menuFocus === 0 ? startMode(true, false) : S.menuFocus === 1 ? startMode(true, true) : startMode(false, false);
 function onA(pi){
   audio();
   if (S.paused){
@@ -1273,7 +1315,7 @@ function onA(pi){
     setPause(false); return;
   }
   switch (S.mode){
-    case 'title': startMode(S.menuFocus === 0); break;
+    case 'title': startFocused(); break;
     case 'charSelect': if (pi >= 0) csReady(pi, true); break;
     case 'practiceSetup': practicePick(); break;
     case 'kiosk': kioskPick(); break;
@@ -1301,6 +1343,7 @@ function onY(){
   if (S.mode === 'title') openHow('title');
   else if (S.mode === 'matchEnd') openCharSelect();
   else if (S.mode === 'practiceWin' && !$('winScreen').hidden) openPracticeSetup();
+  else if (S.mode === 'charSelect' && S.cpu) cycleCpuLevel();
 }
 function afterChars(){ if (S.versus) startMatch(); else openPracticeSetup(); }
 
@@ -1548,10 +1591,11 @@ function openCharSelect(){
     p.mesh.visible = false; p.tt.visible = p.active;
     p.tt.position.x = S.versus ? (p.i ? 1.9 : -1.9) : 0;
   });
-  S.csReady = [false, !S.versus];
+  S.csReady = [false, !S.versus || S.cpu];
+  if (S.cpu && LOOKS[1].color === LOOKS[0].color){ LOOKS[1].color = COLORS.find(c => c !== LOOKS[0].color); applyLook(P[1]); }
   $('hud').hidden = true; $('hudBottom').hidden = true; $('touch').hidden = true; $('count').hidden = true;
   $('cs1').hidden = !S.versus;
-  $('csEyebrow').textContent = S.versus ? 'Pilih karakter · Tanding' : 'Pilih karakter · Latihan';
+  $('csEyebrow').textContent = 'Pilih karakter · ' + (S.cpu ? 'Lawan CPU' : S.versus ? 'Tanding' : 'Latihan');
   renderChar();
   show('charScreen');
   requestAnimationFrame(fitChar);
@@ -1561,6 +1605,14 @@ function renderChar(){
     const L = LOOKS[i], other = LOOKS[1 - i], ready = S.csReady[i];
     const el = $('cs' + i);
     el.classList.toggle('ready', ready);
+    if (i === 1 && S.cpu){
+      el.innerHTML = `
+        <div class="cs-head"><span class="pname">CPU</span><span class="cs-state on">Siap!</span></div>
+        <p class="cpu-note">Lawan komputer. Pilih tingkat kesulitan:</p>
+        <div class="genders diff3">${Object.keys(CPU_LEVELS).map(k => `<button class="gbtn${k === S.cpuLevel ? ' sel' : ''}" data-diff="${k}">${CPU_LEVELS[k].name}</button>`).join('')}</div>
+        <p class="cpu-note">${CPU_LEVELS[S.cpuLevel].desc} Ganti tingkat dengan Y atau C.</p>`;
+      return;
+    }
     el.innerHTML = `
       <div class="cs-head"><span class="pname">P${i+1}</span><span class="cs-state${ready ? ' on' : ''}">${ready ? 'Siap!' : 'Memilih'}</span></div>
       <div class="swatches">${COLORS.map((c, k) => {
@@ -1612,6 +1664,7 @@ $('charScreen').addEventListener('click', e => {
   if (b.dataset.c) csColor(pi, 0, b.dataset.c);
   else if (b.dataset.g) csGender(pi, b.dataset.g);
   else if (b.dataset.ready) csReady(pi, !S.csReady[pi]);
+  else if (b.dataset.diff){ S.cpuLevel = b.dataset.diff; saveCpuLevel(); renderChar(); tone(700,.06,'triangle',.1); }
 });
 function fitChar(){
   const solo = !S.versus, hx = solo ? 1.3 : 3.1;
@@ -1697,7 +1750,8 @@ function connectedPads(){
   return list.filter(p => p && p.connected).sort((a,b) => a.index - b.index);
 }
 function padFor(pi){
-  const idx = S.versus ? S.padOf[pi] : (S.padOf[0] !== null ? S.padOf[0] : S.padOf[1]);
+  if (S.cpu && pi === 1) return null;
+  const idx = humans2() ? S.padOf[pi] : (S.padOf[0] !== null ? S.padOf[0] : S.padOf[1]);
   if (idx === null || idx === undefined) return null;
   const list = navigator.getGamepads ? navigator.getGamepads() : [];
   return list[idx] || null;
@@ -1731,7 +1785,7 @@ function pollPads(){
   for (let sl = 0; sl < 2; sl++){
     if (S.padOf[sl] !== null && !idxs.includes(S.padOf[sl])){
       S.padOf[sl] = null;
-      const needed = PAUSABLE.includes(S.mode) && P[sl] && P[sl].active && (S.versus || conn.length === 0);
+      const needed = PAUSABLE.includes(S.mode) && P[sl] && P[sl].active && (humans2() || conn.length === 0) && (!S.cpu || sl === 0);
       if (needed){ S.padLost[sl] = true; setPause(true, 'Sambungkan kembali controller P' + (sl + 1) + '.'); }
       updatePadStatus();
     }
@@ -1748,7 +1802,7 @@ function pollPads(){
     const prev = prevPad[p.index] || (prevPad[p.index] = {b:[], ax:0, ay:0});
     const down = i => !!(p.buttons[i] && p.buttons[i].pressed);
     const edge = i => down(i) && !prev.b[i];
-    const owner = S.versus ? S.padOf.indexOf(p.index) : 0;
+    const owner = humans2() ? S.padOf.indexOf(p.index) : 0;
     const ax = p.axes[0] || 0, axDir = ax > .6 ? 1 : ax < -.6 ? -1 : 0;
     const ay = p.axes[1] || 0, ayDir = ay > .6 ? 1 : ay < -.6 ? -1 : 0;
     if (S.mode === 'title' && !S.paused){
@@ -1781,13 +1835,14 @@ function pollPads(){
   }
 }
 function readMove(pi){
+  if (S.cpu && pi === 1) return AI.move;
   let x = 0, z = 0;
   const has = list => list.some(k => keys[k]);
-  for (const k of (S.versus ? [KEYS[pi]] : KEYS)){
+  for (const k of (humans2() ? [KEYS[pi]] : KEYS)){
     if (has(k.left)) x -= 1; if (has(k.right)) x += 1;
     if (has(k.up)) z -= 1; if (has(k.down)) z += 1;
   }
-  const pads = S.versus ? [padFor(pi)] : connectedPads();
+  const pads = humans2() ? [padFor(pi)] : connectedPads();
   for (const p of pads){
     if (!p) continue;
     const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
@@ -1798,7 +1853,7 @@ function readMove(pi){
     if (b[12] && b[12].pressed) z -= 1;
     if (b[13] && b[13].pressed) z += 1;
   }
-  const t = touchVec[S.versus ? pi : 0];
+  const t = touchVec[humans2() ? pi : 0];
   x += t.x; z += t.y;
   const len = Math.hypot(x,z);
   if (len > 1){ x /= len; z /= len; }
@@ -1814,7 +1869,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (S.paused){ if (KEYS.some(k => k.a.includes(e.code))) onA(0); return; }
-  if (S.mode === 'title' && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyW','KeyS'].includes(e.code)){ moveFocus(1); return; }
+  if (S.mode === 'title' && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyW','KeyS'].includes(e.code)){ moveFocus(['ArrowLeft','ArrowUp','KeyA','KeyW'].includes(e.code) ? -1 : 1); return; }
   if (e.code === 'KeyH' && S.mode === 'title'){ openHow('title'); return; }
   if (e.code === 'KeyC' && S.mode === 'matchEnd'){ openCharSelect(); return; }
   if (e.code === 'KeyC' && S.mode === 'practiceWin'){ onY(); return; }
@@ -1829,8 +1884,9 @@ addEventListener('keydown', e => {
     return;
   }
   if (S.mode === 'charSelect'){
+    if (e.code === 'KeyC' && S.cpu){ cycleCpuLevel(); return; }
     KEYS.forEach((k, ki) => {
-      const pi = S.versus ? ki : 0;
+      const pi = humans2() ? ki : 0;
       if (k.left.includes(e.code)) csColor(pi, -1);
       if (k.right.includes(e.code)) csColor(pi, 1);
       if (k.up.includes(e.code) || k.down.includes(e.code) || k.sel.includes(e.code)) csGender(pi);
@@ -1840,7 +1896,7 @@ addEventListener('keydown', e => {
     return;
   }
   KEYS.forEach((k, ki) => {
-    const pi = S.versus ? ki : 0;
+    const pi = humans2() ? ki : 0;
     if (k.a.includes(e.code)) onA(pi);
     if (k.sel.includes(e.code)) cycleSel(pi, 1);
     if (k.pw.includes(e.code)) usePower(pi);
@@ -1871,10 +1927,10 @@ const tap = (id, fn) => $(id).addEventListener('pointerdown', e => { e.preventDe
 tap('aL', () => onA(0)); tap('sL', () => { audio(); cycleSel(0, 1); });
 tap('aR', () => onA(1)); tap('sR', () => { audio(); cycleSel(1, 1); });
 tap('pL', () => { audio(); usePower(0); }); tap('pR', () => { audio(); usePower(1); });
-$('modeVs').addEventListener('click', () => startMode(true));
-$('modePr').addEventListener('click', () => startMode(false));
-$('modeVs').addEventListener('pointerenter', () => { if (S.menuFocus !== 0) moveFocus(1); });
-$('modePr').addEventListener('pointerenter', () => { if (S.menuFocus !== 1) moveFocus(1); });
+$('modeVs').addEventListener('click', () => startMode(true, false));
+$('modeCpu').addEventListener('click', () => startMode(true, true));
+$('modePr').addEventListener('click', () => startMode(false, false));
+MODE_IDS.forEach((id, k) => $(id).addEventListener('pointerenter', () => setFocus(k)));
 $('rsNext').addEventListener('click', () => onA(0));
 $('msAgain').addEventListener('click', () => onA(0));
 $('msMenu').addEventListener('click', toMenu);
@@ -1894,7 +1950,7 @@ const ZONE_A = -5.8, ZONE_B = 6.6, OBS_GAP = .6;
 const OBS = {
   road:{depth:4.8, name:'Jalan tiga lajur'},
   rail:{depth:2.4, name:'Rel kereta'},
-  river:{depth:4.2, name:'Batu sungai'}
+  river:{depth:8.4, name:'Batu sungai'}
 };
 const CAR_COLORS = ['#8f7ae6','#4fcfa1','#f6c945','#f28b30','#7cc8ec'];
 // traffic and trains run through both lanes and pass under the centre bridge
@@ -1937,6 +1993,93 @@ function tunnel(g, u, zc, depth){
   const mouth = mesh(new THREE.PlaneGeometry(Math.max(.6, depth - .5), .84), C.plum, false, false);
   mouth.rotation.y = -s*Math.PI/2; mouth.position.set(u - s*.215, .54, zc); g.add(mouth);
 }
+/* vehicles:start */
+// three original toy car styles: a sleek electric sedan, a compact electric crossover and a big boxy 7-seat SUV (no logos)
+const VEHICLES = {
+  sedan:{half:.9, colors:['#f4f5f7','#d23b3b','#2b3a55','#9aa3ad']},
+  cross:{half:.8, colors:['#3fb8c8','#f2f2ee','#5f6675','#4f86d9']},
+  suv:{half:.97, colors:['#f4f4f2','#2a2a2e','#8e949b','#6b4f3a']}
+};
+const VEH_TYPES = Object.keys(VEHICLES);
+function extrudeSide(pts, depth, matc, bevel){
+  const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]);
+  for (let k = 1; k < pts.length; k++) sh.lineTo(pts[k][0], pts[k][1]);
+  const geo = new THREE.ExtrudeGeometry(sh, {depth, bevelEnabled:!!bevel, bevelThickness:bevel || 0, bevelSize:bevel || 0, bevelSegments:2, curveSegments:4});
+  geo.translate(0, 0, -depth/2);
+  return mesh(geo, matc);
+}
+function vehWheels(g, xs, r, zs, y){
+  for (const x of xs) for (const z of zs){
+    const w = mesh(new THREE.CylinderGeometry(r, r, .14, 16), '#22202a'); w.rotation.x = Math.PI/2; w.position.set(x, y, z); g.add(w);
+    const hub = mesh(new THREE.CylinderGeometry(r*.55, r*.55, .15, 12), '#c9ccd3', false, false); hub.rotation.x = Math.PI/2; hub.position.set(x, y, z); g.add(hub);
+  }
+}
+function makeVehicle(type, color){
+  const g = new THREE.Group(), glass = '#1d2433';
+  if (type === 'sedan'){
+    g.add(extrudeSide([[-.9,.18],[-.9,.42],[-.62,.5],[-.28,.74],[.12,.76],[.42,.54],[.9,.4],[.9,.18]], .8, color, .04));
+    g.add(extrudeSide([[-.6,.48],[-.29,.8],[.14,.82],[.46,.54]], .9, glass));
+    const bar = mesh(new THREE.BoxGeometry(.04,.05,.62), '#fff6d8', false, false); bar.position.set(.95,.4,0); g.add(bar);
+    const tail = mesh(new THREE.BoxGeometry(.04,.05,.8), '#e3343c', false, false); tail.position.set(-.95,.4,0); g.add(tail);
+    vehWheels(g, [-.55,.55], .17, [-.4,.4], .17);
+  } else if (type === 'cross'){
+    g.add(extrudeSide([[-.8,.2],[-.8,.64],[-.68,.84],[.2,.86],[.46,.62],[.8,.52],[.8,.2]], .84, color, .04));
+    g.add(extrudeSide([[-.74,.62],[-.64,.82],[.18,.84],[.44,.61]], .95, glass));
+    const roof = mesh(new THREE.BoxGeometry(.86,.05,.8), '#2a2a2e'); roof.position.set(-.24,.9,0); g.add(roof);
+    const clad = mesh(new THREE.BoxGeometry(1.64,.1,.9), '#3a3a40'); clad.position.set(0,.26,0); g.add(clad);
+    for (const z of [-.28,.28]){ const l = mesh(new THREE.BoxGeometry(.04,.06,.2), '#fff6d8', false, false); l.position.set(.85,.5,z); g.add(l); }
+    const tail = mesh(new THREE.BoxGeometry(.04,.05,.78), '#e3343c', false, false); tail.position.set(-.85,.58,0); g.add(tail);
+    vehWheels(g, [-.5,.5], .18, [-.42,.42], .18);
+  } else {
+    g.add(extrudeSide([[-.97,.28],[-.97,1.0],[.34,1.0],[.58,.74],[.97,.7],[.97,.28]], .9, color, .03));
+    g.add(extrudeSide([[-.92,.68],[-.92,.94],[.3,.94],[.54,.7]], 1.0, glass));
+    const clad = mesh(new THREE.BoxGeometry(2.0,.14,.96), '#2b2b30'); clad.position.set(0,.33,0); g.add(clad);
+    const grille = mesh(new THREE.BoxGeometry(.05,.18,.62), '#2b2b30', false, false); grille.position.set(1.0,.52,0); g.add(grille);
+    const chrome = mesh(new THREE.BoxGeometry(.06,.04,.66), '#d7dbe2', false, false); chrome.position.set(1.01,.6,0); g.add(chrome);
+    for (const z of [-.36,.36]){
+      const l = mesh(new THREE.BoxGeometry(.05,.07,.16), '#fff6d8', false, false); l.position.set(1.0,.64,z); g.add(l);
+      const rail = mesh(new THREE.BoxGeometry(1.15,.05,.05), '#c9ccd3'); rail.position.set(-.35,1.06,z); g.add(rail);
+    }
+    const tail = mesh(new THREE.BoxGeometry(.04,.16,.12), '#e3343c', false, false);
+    for (const z of [-.38,.38]){ const t2 = tail.clone(); t2.position.set(-1.0,.66,z); g.add(t2); }
+    vehWheels(g, [-.62,.62], .24, [-.44,.44], .24);
+  }
+  return g;
+}
+
+// middle lane: hovering hatchback with a rocket on each side
+const FLYCAR = {half:.86, hover:.8, colors:['#ffd23f','#ff7aa8','#7c5cff','#43d39e','#ff8a3d']};
+function makeFlyCar(color){
+  const g = new THREE.Group(), glass = '#1d2433', flames = [];
+  const tone = k => '#' + new THREE.Color(color).multiplyScalar(k).getHexString(), dark = tone(.74), light = '#' + new THREE.Color(color).lerp(new THREE.Color('#ffffff'), .35).getHexString();
+  g.add(extrudeSide([[-.62,.2],[-.66,.52],[-.5,.78],[.08,.8],[.36,.56],[.66,.48],[.68,.2]], .78, color, .04));
+  g.add(extrudeSide([[-.58,.54],[-.47,.79],[.08,.82],[.38,.55]], .9, glass));
+  const skirt = mesh(new THREE.BoxGeometry(1.36,.1,.84), '#3a3a40'); skirt.position.set(0,.22,0); g.add(skirt);
+  for (const z of [-.27,.27]){ const l = mesh(new THREE.BoxGeometry(.04,.07,.18), '#fff6d8', false, false); l.position.set(.72,.44,z); g.add(l); }
+  const tail = mesh(new THREE.BoxGeometry(.04,.06,.7), '#e3343c', false, false); tail.position.set(-.68,.6,0); g.add(tail);
+  // wheels folded flat (horizontal) for hover mode, glowing underneath
+  for (const x of [-.42,.42]) for (const z of [-.38,.38]){
+    const tyre = mesh(new THREE.CylinderGeometry(.19,.19,.09,18), '#22202a'); tyre.position.set(x,.13,z); g.add(tyre);
+    const hub = mesh(new THREE.CylinderGeometry(.1,.1,.1,14), '#c9ccd3', false, false); hub.position.set(x,.13,z); g.add(hub);
+    const glow = new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.02,18), new THREE.MeshBasicMaterial({color:new THREE.Color('#5fe8ff').convertSRGBToLinear()})); glow.position.set(x,.075,z); g.add(glow);
+  }
+  for (const z of [-.56,.56]){
+    const tube = mesh(new THREE.CylinderGeometry(.13,.13,.95,14), light); tube.rotation.z = Math.PI/2; tube.position.set(-.05,.4,z); g.add(tube);
+    const band = mesh(new THREE.CylinderGeometry(.135,.135,.12,14), dark); band.rotation.z = Math.PI/2; band.position.set(.18,.4,z); g.add(band);
+    const nose = mesh(new THREE.ConeGeometry(.13,.3,14), dark); nose.rotation.z = -Math.PI/2; nose.position.set(.57,.4,z); g.add(nose);
+    const nozzle = mesh(new THREE.CylinderGeometry(.1,.14,.12,14), '#4a4a52'); nozzle.rotation.z = Math.PI/2; nozzle.position.set(-.58,.4,z); g.add(nozzle);
+    const fin = mesh(new THREE.BoxGeometry(.26,.2,.03), dark); fin.position.set(-.4,.55,z); g.add(fin);
+    const strut = mesh(new THREE.BoxGeometry(.3,.05,.16), '#9aa3ad'); strut.position.set(-.05,.4,z*.83); g.add(strut);
+    const fo = new THREE.Mesh(new THREE.ConeGeometry(.11,.5,12), new THREE.MeshBasicMaterial({color:new THREE.Color('#ff6a1a').convertSRGBToLinear(), transparent:true, opacity:.92}));
+    fo.rotation.z = Math.PI/2; fo.position.set(-.89,.4,z); g.add(fo);
+    const fi = new THREE.Mesh(new THREE.ConeGeometry(.06,.3,10), new THREE.MeshBasicMaterial({color:new THREE.Color('#ffd84a').convertSRGBToLinear()}));
+    fi.rotation.z = Math.PI/2; fi.position.set(-.78,.4,z); g.add(fi);
+    flames.push(fo, fi);
+  }
+  g.userData.flames = flames;
+  return g;
+}
+/* vehicles:end */
 function makeCar(color){
   const g = new THREE.Group();
   const body = mesh(new THREE.BoxGeometry(1.5,.42,.86), color); body.position.y = .42; g.add(body);
@@ -1964,11 +2107,14 @@ function roadMovers(o){
   const g = new THREE.Group(); scene.add(g);
   const list = [];
   ROAD_LANES.forEach((L, k) => L.offs.forEach((off, j) => {
-    const car = makeCar(CAR_COLORS[(k*3 + j*2) % CAR_COLORS.length]);
+    const fly = k === 1, rnd = a => a[Math.floor(Math.random()*a.length)];
+    const type = rnd(VEH_TYPES);
+    const car = fly ? makeFlyCar(rnd(FLYCAR.colors)) : makeVehicle(type, rnd(VEHICLES[type].colors));
     car.rotation.y = L.dir > 0 ? 0 : Math.PI;
-    car.position.set(0, .14, o.z1 - L.dz);
+    car.position.set(0, .14 + (fly ? FLYCAR.hover : 0), o.z1 - L.dz);
     g.add(car);
-    const mv = ownMats(car); mv.L = L; mv.off = off; list.push(mv);
+    const mv = ownMats(car); mv.L = L; mv.off = off; mv.half = fly ? FLYCAR.half : VEHICLES[type].half; list.push(mv);
+    if (fly){ mv.fly = true; mv.flames = car.userData.flames; mv.ph = Math.random()*6.28; }
   }));
   return {g, list};
 }
@@ -2026,9 +2172,9 @@ function railFront(t, mult, ph){
 }
 const STONE_R = .62;
 // random sinking pattern per lane (not mirrored), always leaving a walkable path of fixed stones
-function stonePlan(z1){
+function stonePlan(z1, rows){
   const st = [];
-  for (let r = 0; r < 4; r++){
+  for (let r = 0; r < rows; r++){
     const us = r % 2 ? [-2.6, 0, 2.6] : [-3.9, -1.3, 1.3, 3.9];
     us.forEach(u => st.push({u, z:z1 - .6 - r*1.0, r}));
   }
@@ -2038,7 +2184,7 @@ function stonePlan(z1){
     const seen = new Set(fixed.filter(s => s.r === 0)), queue = [...seen];
     while (queue.length){
       const a = queue.shift();
-      if (a.r === 3) return true;
+      if (a.r === rows - 1) return true;
       for (const b of fixed) if (!seen.has(b) && Math.hypot(a.u - b.u, a.z - b.z) <= reach){ seen.add(b); queue.push(b); }
     }
     return false;
@@ -2066,7 +2212,7 @@ function buildRiver(i, z0, z1){
     const pad = mesh(new THREE.CylinderGeometry(.32,.32,.03,14,1,false,0,Math.PI*1.7), '#6fcf86', false, true);
     pad.position.set(u,.14,z0 + dz); g.add(pad);
   }
-  const stones = stonePlan(z1).map(s => {
+  const stones = stonePlan(z1, Math.round((depth - .4)/1.0)).map(s => {
     const m = mesh(new THREE.CylinderGeometry(STONE_R*.92, STONE_R, .3, 14), s.r % 2 ? '#d7cfe0' : '#cfc6da');
     m.position.set(s.u,.1,s.z); g.add(m);
     return Object.assign(s, {m});
@@ -2115,13 +2261,15 @@ function pickCourse(level){
   const easy = shuffle(EASY.slice());
   if (level === 0){ S.prevSingle = easy[0]; return [easy[0]]; }
   if (level === 1){ const t = easy.find(x => x !== S.prevSingle); S.prevSingle = t; return [t]; }
-  if (level <= 3) return shuffle([easy[0], pick(MEDIUM)]);
-  // final round: one of each tier, as long as it fits the obstacle zone
-  for (let k = 0; k < 40; k++){
-    const set = [pick(EASY), pick(MEDIUM), pick(HARD)];
-    if (set.reduce((a, t) => a + OBS[t].depth, 0) + .7 <= ZONE_B - ZONE_A) return shuffle(set);
+  const fits = set => set.reduce((a, t) => a + OBS[t].depth, 0) + (set.length >= 3 ? .35 : OBS_GAP)*(set.length - 1) <= ZONE_B - ZONE_A + 1e-6;
+  const combos = [];
+  if (level <= 3){ for (const a of EASY) for (const b of MEDIUM) if (fits([a, b])) combos.push([a, b]); }
+  else {
+    // final round: easy + medium + hard when it fits, otherwise any pair that includes a hard obstacle
+    for (const a of EASY) for (const b of MEDIUM) for (const c of HARD) if (fits([a, b, c])) combos.push([a, b, c]);
+    for (const a of EASY.concat(MEDIUM)) for (const c of HARD) if (fits([a, c])) combos.push([a, c]);
   }
-  return shuffle(['rail', 'arrows', 'hammer']);
+  return shuffle(pick(combos).slice());
 }
 function updateCourse(t){
   const dto = S.dto || 0;
@@ -2133,6 +2281,13 @@ function updateCourse(t){
         mv.obj.position.x = x;
         mv.obj.visible = Math.abs(x) < 13;
         if (mv.obj.visible) setClip(mv, laneOf(x));
+        if (mv.fly && mv.obj.visible){
+          const tt = performance.now()/1000;
+          mv.obj.position.y = .14 + FLYCAR.hover + Math.sin(tt*3 + mv.ph)*.07;
+          mv.obj.rotation.x = Math.sin(tt*2.2 + mv.ph)*.04;
+          const f = .8 + Math.random()*.45;
+          mv.flames.forEach(fl => fl.scale.set(1, f, 1));
+        }
       });
     } else if (o.type === 'rail'){
       const {front} = railFront(t, o.mult, o.phase);
@@ -2171,9 +2326,9 @@ function hazard(p){
     if (pz > o.z1 + .9 || pz < o.z0 - .9) continue;
     if (o.type === 'road'){
       for (const mv of o.movers.list){
-        if (Math.abs(pz - (o.z1 - mv.L.dz)) > .74) continue;
+        if (Math.abs(pz - (o.z1 - mv.L.dz)) > .62) continue;
         const x = carX(mv.L, mv.off, t, o.mult);
-        if (touches(visSpan(x - .75, x + .75, p.i))) out.hit = 'car';
+        if (touches(visSpan(x - mv.half, x + mv.half, p.i))) out.hit = 'car';
       }
     } else if (o.type === 'rail'){
       if (Math.abs(pz - (o.z0 + o.z1)/2) < .78){
@@ -2238,11 +2393,11 @@ function animateKnock(p, dt){
 
 /* ---------- tahap 6: rintangan lanjutan ---------- */
 Object.assign(OBS, {
-  arrows:{depth:3.0, name:'Hujan panah'},
+  arrows:{depth:6.0, name:'Hujan panah'},
   belt:{depth:6.4, name:'Sabuk berjalan'},
   carousel:{depth:4.0, name:'Komidi putar'},
-  hammer:{depth:2.6, name:'Palu raksasa'},
-  floor:{depth:3.6, name:'Lantai runtuh'}
+  hammer:{depth:5.2, name:'Palu raksasa'},
+  floor:{depth:7.2, name:'Lantai runtuh'}
 });
 const KNOCK_TEXT = {water:'Byur!', fall:'Jatuh!', car:'Tertabrak!', train:'Tertabrak kereta!', arrow:'Kena panah!', hammer:'Kena palu!', roller:'Tergilas roller!'};
 function pitPlane(g, z0, z1){
@@ -2261,7 +2416,7 @@ function stripeTex(c1, c2, n){
 }
 
 /* hujan panah: red targets appear, arrows from the side towers land on them */
-const ARROW = {warn:.9, flight:.5, every:1.25, per:3, hitR:.62};
+const ARROW = {warn:.9, flight:.5, every:1.25, per:5, hitR:.62};
 function makeArrow(){
   const g = new THREE.Group();
   const shaft = mesh(new THREE.CylinderGeometry(.03,.03,1.1,6), '#b98b6a'); g.add(shaft);
@@ -2274,8 +2429,8 @@ function buildArrows(i, z0, z1){
   const band = mesh(new THREE.BoxGeometry(LANE_W - .02,.02,z1 - z0), '#f6e7d0', false, true); band.position.set(0,.125,mid); g.add(band);
   for (const z of [z0 + .06, z1 - .06]){ const e = mesh(new THREE.BoxGeometry(LANE_W - .02,.012,.1), '#e3343c', false, true); e.position.set(0,.14,z); g.add(e); }
   const towers = [];
-  for (const u of [-5.2, 5.2]){
-    const tw = new THREE.Group(); tw.position.set(u, 0, mid);
+  for (const [u, tz] of [[-5.2, z0 + (z1 - z0)*.25], [5.2, z0 + (z1 - z0)*.75], [-5.2, z0 + (z1 - z0)*.75], [5.2, z0 + (z1 - z0)*.25]]){
+    const tw = new THREE.Group(); tw.position.set(u, 0, tz);
     const body = mesh(new THREE.CylinderGeometry(.34,.4,2.2,10), '#f3e3c3'); body.position.y = 1.1; tw.add(body);
     const top = mesh(new THREE.CylinderGeometry(.46,.46,.3,10), C.white); top.position.y = 2.3; tw.add(top);
     const roof = mesh(new THREE.ConeGeometry(.52,.6,10), '#e3343c'); roof.position.y = 2.75; tw.add(roof);
@@ -2283,7 +2438,7 @@ function buildArrows(i, z0, z1){
   }
   const ringMat = () => new THREE.MeshBasicMaterial({color:new THREE.Color('#e3343c').convertSRGBToLinear(), transparent:true, opacity:.9, depthWrite:false});
   const pool = [];
-  for (let k = 0; k < 12; k++){
+  for (let k = 0; k < 20; k++){
     const ring = new THREE.Mesh(new THREE.RingGeometry(.42,.6,24), ringMat()); ring.rotation.x = -Math.PI/2; ring.visible = false; g.add(ring);
     const dot = new THREE.Mesh(new THREE.CircleGeometry(.42,24), ringMat()); dot.rotation.x = -Math.PI/2; dot.visible = false; g.add(dot);
     const ar = makeArrow(); ar.visible = false; g.add(ar);
@@ -2367,8 +2522,8 @@ function buildBelt(i, z0, z1){
 }
 function updateBelt(o, t, dto){
   o.lanes.forEach(l => {
-    l.sideTex.offset.x -= BELT.side*o.mult*dto/2.2;
-    l.backTex.offset.x -= BELT.back*o.mult*dto/1.6;
+    l.sideTex.offset.x -= BELT.side*dto/2.2;
+    l.backTex.offset.x -= BELT.back*dto/1.6;
     l.rollers.forEach(r => { r.rotation.y += dto*6; });
   });
 }
@@ -2376,9 +2531,9 @@ function hazBelt(o, p, out){
   if (S.freeze > 0) return;
   const l = o.lanes[p.i], pu = p.x - p.laneX;
   if (p.z > l.zs[0] && p.z < l.zs[1]){
-    out.push = {x:BELT.side*o.mult, z:0};
+    out.push = {x:BELT.side, z:0};
     if (pu > 4.45) out.hit = 'roller';
-  } else if (p.z > l.zb[0] && p.z < l.zb[1]) out.push = {x:0, z:BELT.back*o.mult};
+  } else if (p.z > l.zb[0] && p.z < l.zb[1]) out.push = {x:0, z:BELT.back};
 }
 
 /* komidi putar: a turning cross of planks over a pit */
@@ -2421,17 +2576,18 @@ const HAM = {piv:4.4, len:3.5, amp:1.05, w:1.9};
 function buildHammer(i, z0, z1){
   const g = laneGroup(i), mid = (z0 + z1)/2;
   const band = mesh(new THREE.BoxGeometry(LANE_W - .02,.02,z1 - z0), '#efe5f6', false, true); band.position.set(0,.125,mid); g.add(band);
-  const rows = [mid - .62, mid + .62];
-  for (const u of [-5.15, 5.15]){ const post = mesh(new THREE.BoxGeometry(.24,HAM.piv + .2,.24), C.white); post.position.set(u,(HAM.piv + .2)/2,mid); g.add(post); }
-  for (const z of [mid - .62, mid + .62]){ const beam = mesh(new THREE.BoxGeometry(10.6,.2,.22), '#8f7ae6'); beam.position.set(0,HAM.piv + .1,z); g.add(beam); }
-  for (const u of [-5.15, 5.15]){ const tie = mesh(new THREE.BoxGeometry(.26,.2,1.5), '#8f7ae6'); tie.position.set(u,HAM.piv + .1,mid); g.add(tie); }
+  const nRows = Math.max(2, Math.round((z1 - z0)/1.9)), rows = [];   // rows spaced so you can pause between them
+  for (let r = 0; r < nRows; r++) rows.push(z1 - .65 - r*(z1 - z0 - 1.3)/(nRows - 1));
+  for (const u of [-5.15, 5.15]) for (const z of [rows[0], rows[nRows - 1]]){ const post = mesh(new THREE.BoxGeometry(.24,HAM.piv + .2,.24), C.white); post.position.set(u,(HAM.piv + .2)/2,z); g.add(post); }
+  for (const z of rows){ const beam = mesh(new THREE.BoxGeometry(10.6,.2,.22), '#8f7ae6'); beam.position.set(0,HAM.piv + .1,z); g.add(beam); }
+  for (const u of [-5.15, 5.15]){ const tie = mesh(new THREE.BoxGeometry(.26,.2,rows[0] - rows[nRows - 1] + .3), '#8f7ae6'); tie.position.set(u,HAM.piv + .1,(rows[0] + rows[nRows - 1])/2); g.add(tie); }
   const hams = [];
   const headCols = ['#f28b30', '#4fcfa1', '#f6c945', '#7cc8ec'];
   rows.forEach((z, r) => [-2.3, 2.3].forEach((pu, c) => {
     const piv = new THREE.Group(); piv.position.set(pu, HAM.piv, z); g.add(piv);
     const handle = mesh(new THREE.CylinderGeometry(.06,.06,HAM.len,8), '#b98b6a'); handle.position.y = -HAM.len/2; piv.add(handle);
     const head = new THREE.Group(); head.position.y = -HAM.len; piv.add(head);
-    const barrel = mesh(new THREE.CylinderGeometry(.42,.42,1.0,16), headCols[r*2 + c]); barrel.rotation.z = Math.PI/2; head.add(barrel);
+    const barrel = mesh(new THREE.CylinderGeometry(.42,.42,1.0,16), headCols[(r*2 + c) % headCols.length]); barrel.rotation.z = Math.PI/2; head.add(barrel);
     for (const sx of [-.42, .42]){ const band2 = mesh(new THREE.CylinderGeometry(.44,.44,.12,16), C.white); band2.rotation.z = Math.PI/2; band2.position.x = sx; head.add(band2); }
     hams.push({piv, pu, z, ph:Math.random()*Math.PI*2});
   }));
@@ -2450,19 +2606,29 @@ function hazHammer(o, p, out){
 }
 
 /* lantai runtuh: tiles crack when stepped on, drop, then come back */
-const TILE = {crack:.55, gone:2.6, rise:.4};
+const TILE = {crack:.38, gone:3.6, rise:.4, auto:.85};
 function buildFloor(i, z0, z1){
   const g = laneGroup(i);
   pitPlane(g, z0, z1);
   const tiles = [], cols = ['#f6c6dc', '#cfe9f7', '#f8e7b5'];
-  for (let r = 0; r < 3; r++) for (let c = 0; c < 7; c++){
+  const rows = Math.round((z1 - z0)/1.2);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < 7; c++){
     const u = -4.2 + c*1.4, z = z1 - .6 - r*1.2;
     const m = mesh(new THREE.BoxGeometry(1.32,.2,1.12), cols[(r + c) % 3]); m.position.set(u,.16,z); g.add(m);
     tiles.push({m, u, z, state:'ok', t:0});
   }
-  return {g, tiles};
+  return {g, tiles, autoT:1.5};
 }
 function updateFloor(o, t, dto){
+  // harder: every so often a random tile crumbles by itself
+  o.lanes.forEach(l => {
+    l.autoT -= dto*o.mult;
+    if (l.autoT <= 0){
+      l.autoT = TILE.auto*(.6 + Math.random()*.8);
+      const ok = l.tiles.filter(tl => tl.state === 'ok');
+      if (ok.length > 6){ const tl = ok[Math.floor(Math.random()*ok.length)]; tl.state = 'crack'; tl.t = 0; }
+    }
+  });
   o.lanes.forEach(l => l.tiles.forEach(tl => {
     if (tl.state === 'ok'){ tl.m.position.y = .16; tl.m.rotation.set(0,0,0); tl.m.visible = true; return; }
     tl.t += dto;
@@ -2486,7 +2652,7 @@ function hazFloor(o, p, out){
   for (const tl of l.tiles){
     if (Math.abs(pu - tl.u) <= .7 && Math.abs(p.z - tl.z) <= .62 && (tl.state === 'ok' || tl.state === 'crack')){
       top = Math.max(top === null ? -9 : top, .26);
-      if (tl.state === 'ok' && p.y <= .02 && p.flyY <= .5){ tl.state = 'crack'; tl.t = 0; }
+      if (tl.state === 'ok' && p.y <= .02 && p.flyY <= .5 && !S.predict){ tl.state = 'crack'; tl.t = 0; }
     }
   }
   if (top === null){ out.water = true; out.fallKind = 'fall'; } else out.standY = top;
@@ -2495,6 +2661,275 @@ function hazFloor(o, p, out){
 Object.assign(BUILD, {arrows:buildArrows, belt:buildBelt, carousel:buildCarousel, hammer:buildHammer, floor:buildFloor});
 const UPDATE2 = {arrows:updateArrows, belt:updateBelt, carousel:updateCarousel, hammer:updateHammer, floor:updateFloor};
 const HAZ2 = {arrows:hazArrows, belt:hazBelt, carousel:hazCarousel, hammer:hazHammer, floor:hazFloor};
+
+/* ---------- CPU opponent (Lawan CPU) ---------- */
+const CPU_LEVELS = {
+  mudah:{name:'Mudah', desc:'Lebih lambat, sering salah pilih balok, jarang merebut power up.', speed:.76, mistake:.3, hesitate:.55, detour:.25, margin:.5},
+  sedang:{name:'Sedang', desc:'Cukup cepat, sesekali salah pilih balok.', speed:.9, mistake:.12, hesitate:.25, detour:.55, margin:.32},
+  sulit:{name:'Sulit', desc:'Cepat, hampir tidak pernah salah, rajin merebut power up.', speed:1, mistake:0, hesitate:.05, detour:.9, margin:.2}
+};
+try { const lv = localStorage.getItem('bd_cpu'); if (CPU_LEVELS[lv]) S.cpuLevel = lv; } catch(e){}
+if (!S.cpuLevel) S.cpuLevel = 'sedang';
+function saveCpuLevel(){ try { localStorage.setItem('bd_cpu', S.cpuLevel); } catch(e){} }
+function cycleCpuLevel(){
+  const ks = Object.keys(CPU_LEVELS);
+  S.cpuLevel = ks[(ks.indexOf(S.cpuLevel) + 1) % ks.length];
+  saveCpuLevel(); renderChar(); tone(700,.06,'triangle',.1);
+}
+const AI = {move:{x:0, z:0}, wantV:null, hes:0, returning:false, cross:null, waitT:0};
+function aiReset(){ Object.assign(AI, {move:{x:0, z:0}, wantV:null, hes:0, returning:false, cross:null, waitT:0}); }
+const aiLv = () => CPU_LEVELS[S.cpuLevel];
+const aiSpeed = p => SPEED*(p.fx.rocket > 0 ? 1.75 : weightOf(p).spd)*aiLv().speed;
+function aiSteer(p, tx, tz){
+  const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+  if (d < .12) return {x:0, z:0};
+  const slow = Math.min(1, d/.7), lv = aiLv().speed;
+  let ix = dx/d*slow*lv, iz = dz/d*slow*lv;
+  if (p.push){                               // lean against conveyor belts
+    const ms = SPEED*(p.fx.rocket > 0 ? 1.75 : weightOf(p).spd);
+    ix -= p.push.x/ms; iz -= p.push.z/ms;
+  }
+  const len = Math.hypot(ix, iz);
+  if (len > 1){ ix /= len; iz /= len; }
+  return {x:ix, z:iz};
+}
+// space beside an obstacle band before the next band starts (or the lane ends)
+function gapBeyond(o, dir){
+  let g = 2;
+  for (const q of course){
+    if (q === o) continue;
+    if (dir < 0 && q.z1 <= o.z0 + .01) g = Math.min(g, o.z0 - q.z1);
+    if (dir > 0 && q.z0 >= o.z1 - .01) g = Math.min(g, q.z0 - o.z1);
+  }
+  return g;
+}
+function aiCrossX(o, p, dir){
+  const L = p.laneX;
+  if ((o.type === 'river' || o.type === 'floor') && p.plank) return L;
+  if (o.type === 'river'){
+    if (p.fx.part > 0) return L;
+    const st0 = o.lanes[p.i].stones, t = S.obsT, row = dir < 0 ? 0 : Math.max(...st0.map(s => s.r));
+    const ok = s => stoneState(s, t).y > -.05 && stoneState(s, t + 1.3).y > -.05;
+    const c = o.lanes[p.i].stones.filter(s => s.r === row).sort((a, b) => (ok(b) - ok(a)) || (Math.abs(L + a.u - p.x) - Math.abs(L + b.u - p.x)));
+    return L + c[0].u;
+  }
+  if (o.type === 'floor'){
+    let best = L, bd = 1e9;
+    for (let c = 0; c < 7; c++){
+      const u = -4.2 + c*1.4, col = o.lanes[p.i].tiles.filter(tl => Math.abs(tl.u - u) < .1);
+      if (col.every(tl => tl.state === 'ok')){ const d = Math.abs(L + u - p.x); if (d < bd){ bd = d; best = L + u; } }
+    }
+    return best;
+  }
+  if (o.type === 'belt') return L - 3.2;      // start well upstream of the sideways push
+  if (o.type === 'carousel') return L;
+  return Math.max(L - 3.6, Math.min(L + 3.6, p.x));
+}
+function carouselTips(o, p, t){
+  const l = o.lanes[p.i], th = carAngle(l, t, o), c = Math.cos(th), sn = Math.sin(th);
+  return [[1,0],[-1,0],[0,1],[0,-1]].map(([lx, lz]) => ({lx, lz, dx: lx*c + lz*sn, dz: -lx*sn + lz*c}));
+}
+// is some arm pointing (within a small angle) along world direction dz = want, at time t?
+function carouselAligned(o, p, t, want){
+  return carouselTips(o, p, t).find(tp => tp.dz*want >= .93 && Math.abs(tp.dx) <= .22) || null;
+}
+function aiSafe(o, p, dir, cx){
+  const v = aiSpeed(p), depth = o.z1 - o.z0, T = (depth + 1.0)/v, lv = aiLv();
+  if (p.fx.glider > T + .3) return true;
+  if (o.type === 'belt' || o.type === 'road' || o.type === 'hammer') return true;   // crossed row by row
+  if (o.type === 'river'){
+    if (p.plank || p.fx.part > T + .5) return true;
+    const t = S.obsT, row = dir < 0 ? 0 : Math.max(...o.lanes[p.i].stones.map(s => s.r));
+    return o.lanes[p.i].stones.some(s => s.r === row && Math.abs(p.laneX + s.u - p.x) < .45 && stoneState(s, t).y > -.05 && stoneState(s, t + 1.3).y > -.05 && !stoneState(s, t).wob);
+  }
+  if (o.type === 'carousel') return !!carouselAligned(o, p, S.obsT + .7/v, -dir);
+  if (S.freeze > T + .2 && o.type !== 'floor') return true;
+  const fake = {i:p.i, x:cx, z:p.z, laneX:p.laneX, side:p.side, fx:{part:p.fx.part || 0}, plank:p.plank, y:0, flyY:0};
+  const shield = p.fx.shield > T + .2;
+  const t0 = S.obsT; let ok = true;
+  S.predict = true;
+  for (let t = 0; t <= T && ok; t += .05){
+    fake.z = p.z + dir*v*t;
+    for (const extra of [0, lv.margin]){
+      S.obsT = t0 + t + extra;
+      const hz = hazard(fake);
+      if ((hz.hit && !shield) || hz.water){ ok = false; break; }
+    }
+  }
+  S.obsT = t0; S.predict = false;
+  return ok;
+}
+function riverStep(o, p, dir, outZ){
+  const l = o.lanes[p.i], t = S.obsT, X = AI.cross, pu = p.x - p.laneX;
+  const steady = (s, d) => stoneState(s, t).y > -.05 && stoneState(s, t + d).y > -.05 && !stoneState(s, t).wob;
+  if (X.target){
+    if (Math.hypot(pu - X.target.u, p.z - X.target.z) < .3){ X.cur = X.target; X.target = null; }
+    else if (stoneState(X.target, t + .3).y > -.05) return {x:p.laneX + X.target.u, z:X.target.z};
+    else X.target = null;
+  }
+  const lastRow = Math.max(...l.stones.map(s => s.r));
+  const curRow = X.cur ? X.cur.r : (dir < 0 ? -1 : lastRow + 1), nr = curRow + (dir < 0 ? 1 : -1);
+  if (nr < 0 || nr > lastRow) return {x:p.x, z:outZ};
+  const from = X.cur ? X.cur : {u:pu, z:p.z}, reach = 1.75;
+  const c = l.stones.filter(s => s.r === nr && steady(s, 1.2) && Math.hypot(s.u - from.u, s.z - from.z) <= reach)
+    .sort((a, b) => Math.abs(a.u - from.u) - Math.abs(b.u - from.u));
+  if (c.length){
+    X.target = c[0];
+    if (Math.hypot(c[0].u - from.u, c[0].z - from.z) > 1.4) AI.jump = true;   // hop the wider gaps
+    return {x:p.laneX + c[0].u, z:c[0].z};
+  }
+  if (X.cur && stoneState(X.cur, t + .7).y <= -.05){     // my stone is about to sink: hop to a steady neighbour
+    const alt = l.stones.find(s => s !== X.cur && steady(s, 1) && Math.hypot(s.u - X.cur.u, s.z - X.cur.z) <= 1.6);
+    if (alt){ X.target = alt; return {x:p.laneX + alt.u, z:alt.z}; }
+  }
+  return X.cur ? {x:p.laneX + X.cur.u, z:X.cur.z} : {x:p.x, z:p.z};
+}
+// frogger-style: cross a band one row (traffic lane / mallet row) at a time, waiting in the gaps between rows
+function rowStep(o, p, dir, outZ, rows, hw, clr){
+  const X = AI.cross, v = aiSpeed(p), lv = aiLv();
+  rows = rows.slice().sort((a, b) => dir < 0 ? b - a : a - b);
+  const passed = z => dir < 0 ? p.z < z - hw - clr + .05 : p.z > z + hw + clr - .05;
+  const next = rows.find(z => !passed(z));
+  if (next === undefined){ X.go = undefined; return {x:X.cx, z:outZ}; }
+  const before = next - dir*(hw + clr), after = next + dir*(hw + clr);
+  if (X.go === next) return {x:X.cx, z: after + dir*.05};
+  if (Math.abs(p.z - before) > .2) return {x:X.cx, z:before};
+  const T = Math.abs(after - p.z)/v + .15, fake = {i:p.i, x:X.cx, z:p.z, laneX:p.laneX, side:p.side, fx:{}, plank:p.plank, y:0, flyY:0};
+  const shield = p.fx.shield > T + .2, t0 = S.obsT;
+  let ok = true;
+  S.predict = true;
+  for (let t = 0; t <= T && ok; t += .04){
+    fake.z = p.z + dir*v*t;
+    for (const extra of [0, lv.margin*.6]){
+      S.obsT = t0 + t + extra;
+      const hz = hazard(fake);
+      if (hz.hit && !shield){ ok = false; break; }
+    }
+  }
+  S.obsT = t0; S.predict = false;
+  // an impatient CPU eventually takes its chances (easier levels give up waiting sooner)
+  X.rowWait = X.rowWaitRow === next ? (X.rowWait || 0) + 1/60 : 0; X.rowWaitRow = next;
+  if (ok || S.freeze > T || X.rowWait > 6 - 2*lv.mistake*10/3){ X.go = next; X.rowWait = 0; return {x:X.cx, z:after + dir*.05}; }
+  return {x:X.cx, z:before};
+}
+function carouselStep(o, p, dir, outZ){
+  const l = o.lanes[p.i], X = AI.cross, v = aiSpeed(p), R = CAR_ARM - .22;
+  const th = carAngle(l, S.obsT, o), c = Math.cos(th), sn = Math.sin(th);
+  const world = (lx, lz) => ({x:p.laneX + lx*c + lz*sn, z:l.mid - lx*sn + lz*c});
+  X.phase = X.phase || 'hub';
+  if (X.phase === 'hub'){
+    if (Math.hypot(p.x - p.laneX, p.z - l.mid) > .4) return {x:p.laneX, z:l.mid};
+    const tip = carouselAligned(o, p, S.obsT + R/v, dir);   // leave when an arm will point at the exit as we reach its tip
+    if (tip){ X.phase = 'tip'; X.tip = tip; } else return {x:p.laneX, z:l.mid};
+  }
+  if (X.phase === 'tip'){
+    const w = world(X.tip.lx*R, X.tip.lz*R);
+    if (Math.hypot(p.x - w.x, p.z - w.z) < .3){
+      const nowDir = carouselTips(o, p, S.obsT).find(tp => tp.lx === X.tip.lx && tp.lz === X.tip.lz);
+      if (nowDir.dz*dir >= .9){ X.phase = 'exit'; }
+      else { X.phase = 'hub'; return {x:p.laneX, z:l.mid}; }
+    } else return w;
+  }
+  return {x:p.x, z:outZ};
+}
+function aiUsePowerAt(p, o){
+  const t = p.slot; if (!t) return;
+  const fits = {
+    glider:true, rocket:true, bag: !!p.held,
+    stop: o.type !== 'belt',
+    shield: ['road','rail','arrows','hammer','belt'].includes(o.type),
+    part: o.type === 'river', plank: o.type === 'river' || o.type === 'floor'
+  };
+  if (fits[t] || AI.waitT > 2.5) usePower(p.i);
+}
+function aiNav(p, tx, tz){
+  if (AI.cross){
+    const o = AI.cross.o, dir = AI.cross.dir, outZ = dir < 0 ? o.z0 - Math.min(.55, gapBeyond(o, -1)*.5) : o.z1 + Math.min(.55, gapBeyond(o, 1)*.5);
+    if ((dir < 0 && p.z <= o.z0 - .12) || (dir > 0 && p.z >= o.z1 + .12)) AI.cross = null;
+    else {
+      if (p.flyY > .5) return {x:AI.cross.cx, z:outZ};
+      if (o.type === 'river' && !(p.plank || p.fx.part > 0)) return riverStep(o, p, dir, outZ);
+      if (o.type === 'carousel') return carouselStep(o, p, dir, outZ);
+      if (o.type === 'road') return rowStep(o, p, dir, outZ, ROAD_LANES.map(L => o.z1 - L.dz), .62, .18);
+      if (o.type === 'hammer') return rowStep(o, p, dir, outZ, [...new Set(o.lanes[p.i].hams.map(h => h.z))], .62, .3);
+      return {x:AI.cross.cx, z:outZ};
+    }
+  }
+  const dz = tz - p.z;
+  if (Math.abs(dz) < .05) return {x:tx, z:tz};
+  const dir = Math.sign(dz);
+  const inside = course.find(o => p.z < o.z1 && p.z > o.z0);
+  if (inside){ AI.cross = {o:inside, dir, cx:p.x, cur:null}; return aiNav(p, tx, tz); }
+  let next = null;
+  for (const o of course){
+    if (dir < 0 && o.z1 <= p.z + .01 && tz < o.z0 && (!next || o.z1 > next.z1)) next = o;
+    if (dir > 0 && o.z0 >= p.z - .01 && tz > o.z1 && (!next || o.z0 < next.z0)) next = o;
+  }
+  if (!next){ AI.waitT = 0; return {x:tx, z:tz}; }
+  const edge = dir < 0 ? next.z1 : next.z0;
+  const standZ = edge - dir*Math.min(.5, gapBeyond(next, -dir)*.5);
+  const cx = aiCrossX(next, p, dir);
+  if (Math.abs(edge - p.z) > 1.2 || Math.abs(p.x - cx) > .3 || Math.abs(p.z - standZ) > .3){ AI.waitT = 0; return {x:cx, z:standZ}; }
+  aiUsePowerAt(p, next);
+  if (aiSafe(next, p, dir, cx)){
+    AI.cross = {o:next, dir, cx, cur:null}; AI.waitT = 0;
+    return aiNav(p, tx, tz);
+  }
+  AI.waitT += 1/60;
+  return {x:cx, z:standZ};
+}
+function aiUpdate(dt){
+  const p = P[1];
+  if (!p || S.mode !== 'play' || !p.active){ AI.move = {x:0, z:0}; return; }
+  if (p.stun > 0){ AI.move = {x:0, z:0}; AI.cross = null; AI.hes = 0; return; }
+  const lv = aiLv(), sum = plateSum(p);
+  const panStand = {x:p.laneX - p.side*PAN_X, z:SCALE.z + 2.25};
+  const padStand = v => { const pd = p.pads.find(q => q.v === v) || p.pads[0]; return {x:pd.x, z:PADS_Z - 1.15}; };
+  let goal = null, act = null;
+  if (p.held){
+    if (AI.returning){
+      const pd = p.pads.reduce((a, b) => Math.abs(b.x - p.x) < Math.abs(a.x - p.x) ? b : a);
+      goal = {x:pd.x, z:PADS_Z - 1.15}; act = 'return';
+    } else { goal = panStand; act = 'put'; }
+  } else if (sum > p.M){ goal = panStand; act = 'take'; }
+  else if (sum < p.M){
+    if (AI.wantV === null){
+      // a 10 is too heavy to carry against the conveyor belts, so the CPU sticks to 5 and below there
+      const vals = p.pads.map(q => q.v).filter(v => !(v >= 10 && course.some(o => o.type === 'belt'))).sort((a, b) => b - a), rem = p.M - sum;
+      AI.wantV = vals.find(x => x <= rem) || vals[vals.length - 1];
+      if (Math.random() < lv.mistake) AI.wantV = vals[Math.floor(Math.random()*vals.length)];
+    }
+    goal = padStand(AI.wantV); act = 'pick';
+  }
+  // grab a power up on the bridge when it lies on our side of the obstacles
+  if (!p.slot && !AI.cross){
+    const f = field.find(f => f.state === 'idle');
+    if (f){
+      if (f.aiWant === undefined) f.aiWant = Math.random() < lv.detour;
+      const between = course.some(o => (o.z0 < Math.max(p.z, f.z)) && (o.z1 > Math.min(p.z, f.z)));
+      if (f.aiWant && !between && Math.abs(f.z - p.z) < 6){ goal = {x:p.laneX - p.side*X_ROOM, z:f.z}; act = null; }
+    }
+  }
+  if (!goal){ AI.move = {x:0, z:0}; return; }
+  const wp = aiNav(p, goal.x, goal.z);
+  AI.move = aiSteer(p, wp.x, wp.z);
+  if (AI.jump){ AI.jump = false; if (p.y <= .001 && p.vy <= 0){ p.vy = JUMP_V*weightOf(p).jump; p.y = .001; sfx.jump(); } }
+  if (act && !AI.cross && Math.hypot(p.x - goal.x, p.z - goal.z) < .5){
+    AI.hes += dt;
+    if (AI.hes < lv.hesitate) return;
+    AI.hes = 0;
+    const a = actionFor(p);
+    if (act === 'pick' && a.kind === 'padTake' && a.pd.v === AI.wantV){ playerA(1); AI.wantV = null; }
+    else if (act === 'put' && a.kind === 'panPut') playerA(1);
+    else if (act === 'take' && a.kind === 'panTake'){ p.sel = p.plate.length - 1; playerA(1); AI.returning = true; }
+    else if (act === 'return'){
+      if (a.kind === 'padReturn') playerA(1);
+      else if (p.held){ popHeld(p); sfx.back(); }
+      AI.returning = false;
+    }
+  } else AI.hes = 0;
+  if (p.slot && (p.fx.bag === undefined || !p.fx.bag) && p.slot === 'bag' && p.held && p.held.userData.value >= 5) usePower(1);
+}
 
 /* ---------- puffs ---------- */
 const puffs = [];
@@ -2665,7 +3100,7 @@ function buildPowerIcons(){
 function puKey(pi){
   if (isTouch) return 'Pakai';
   if (padFor(pi)) return 'X';
-  return S.versus ? KEYS[pi].pwName : 'F';
+  return humans2() ? KEYS[pi].pwName : 'F';
 }
 let field = [];   // power ups lying on (or falling onto) the bridge
 function resetPowerField(){
@@ -3066,7 +3501,7 @@ const chipO = o => heldChip(o.userData.value, o.userData.special);
 function selKey(pi){
   if (isTouch) return 'Pilih';
   if (padFor(pi)) return 'LB/RB';
-  return S.versus ? KEYS[pi].selName : 'Q';
+  return humans2() ? KEYS[pi].selName : 'Q';
 }
 function promptFor(p){
   if (S.mode !== 'play' || !p.active) return {html:'', muted:false};
@@ -3085,19 +3520,19 @@ function promptFor(p){
     case 'padTake': return {html:'Ambil balok ' + heldChip(a.pd.v), muted:false};
     case 'panEmpty': return {html:'Piring masih kosong', muted:true};
     case 'machPut': {
-      const sym = a.m.kind === 'add' ? '+' : '−';
+      const sym = machSym(a.m);
       if (a.m.inputs.length === 1){
-        const x = a.m.inputs[0].userData.value, y = a.o.userData.value, r = a.m.kind === 'add' ? x + y : x - y;
+        const x = a.m.inputs[0].userData.value, y = a.o.userData.value, r = machCalc(a.m.kind, x, y);
         return {html:`Masukkan ${hv} ke rak ${sym}: ${fmtV(x)} ${sym} ${fmtV(y)} = ${heldChip(r, true)}`, muted:false};
       }
       return {html:`Masukkan ${hv} ke rak ${sym}`, muted:false};
     }
-    case 'machBad': return {html:`Hasilnya 0, tidak bisa dibuat (${fmtV(a.m.inputs[0].userData.value)} − ${fmtV(a.o.userData.value)})`, muted:true};
-    case 'machFull': return {html:'Ambil dulu hasil di rak ' + (a.m.kind === 'add' ? '+' : '−'), muted:true};
-    case 'machBusy': return {html:'Rak ' + (a.m.kind === 'add' ? '+' : '−') + ' sedang menghitung', muted:true};
+    case 'machBad': return {html: a.m.kind === 'div' ? `Hasil bagi harus bulat (${fmtV(a.m.inputs[0].userData.value)} ÷ ${fmtV(a.o.userData.value)} tidak bulat)` : `Hasilnya 0, tidak bisa dibuat (${fmtV(a.m.inputs[0].userData.value)} − ${fmtV(a.o.userData.value)})`, muted:true};
+    case 'machFull': return {html:'Ambil dulu hasil di rak ' + machSym(a.m), muted:true};
+    case 'machBusy': return {html:'Rak ' + machSym(a.m) + ' sedang menghitung', muted:true};
     case 'machTake': return {html:'Ambil hasil ' + chipO(a.m.out), muted:false};
-    case 'machBack': return {html:'Ambil kembali ' + chipO(a.m.inputs[a.m.inputs.length - 1]) + ' dari rak ' + (a.m.kind === 'add' ? '+' : '−'), muted:false};
-    case 'machEmpty': return {html:'Rak ' + (a.m.kind === 'add' ? 'penambah: masukkan dua balok untuk dijumlah' : 'pengurang: balok pertama dikurangi balok kedua'), muted:true};
+    case 'machBack': return {html:'Ambil kembali ' + chipO(a.m.inputs[a.m.inputs.length - 1]) + ' dari rak ' + machSym(a.m), muted:false};
+    case 'machEmpty': return {html:'Rak ' + MACH_KINDS[a.m.kind].name + ': ' + MACH_KINDS[a.m.kind].help, muted:true};
     case 'kiosk': return {html:'Pilih power up dari mesin', muted:false};
     case 'panTake': {
       let html = 'Ambil kembali ' + chipO(p.plate[p.sel >= 0 ? p.sel : p.plate.length - 1]);
@@ -3297,7 +3732,7 @@ function updatePlayer(p, dt){
     {x:p.laneX + p.side*PAN_X, z:SCALE.z, r:PAN_R},
     {x:p.laneX - p.side*PAN_X, z:SCALE.z, r:PAN_R}
   ].concat(p.pads.map(pd => ({x:pd.x, z:pd.z, r:.62})),
-    p.mach.flatMap(m => [{x:m.x, z:m.z - .45, r:.56}, {x:m.x, z:m.z + .45, r:.56}]),
+    p.mach.flatMap(m => m.cols),
     rackSlots(p).map(k => ({x:p.laneX + rackU(p,k), z:RACK_Z, r:k < 2 ? .5 : .55})),
     course.filter(o => o.type === 'rail').map(o => ({x:p.laneX, z:o.lanes[p.i].postZ, r:.14})));
   for (const c of cols){
@@ -3412,6 +3847,7 @@ function frame(now){
   updatePowerField(dt);
   updateFauna(dt);
   updateCourse(S.obsT);
+  if (S.cpu) aiUpdate(dt);
   P.forEach(p => updatePlayer(p, dt));
   P.forEach(p => updateScale(p, dt));
   P.forEach(p => {
